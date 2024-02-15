@@ -1,9 +1,22 @@
 package main
 
-import "log"
+import (
+	"context"
+	"log"
+	"megachat/internal/pkg/app"
+)
 
 func main() {
 	log.Println("Megachat backend started!")
+
+	a, err := app.New(context.Background())
+	if err != nil {
+		log.Println(err)
+
+		return
+	}
+
+	a.StartServer()
 
 	log.Println("Megachat backend is shutting down...")
 }
