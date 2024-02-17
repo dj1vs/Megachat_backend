@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package app
+package ws
 
 import (
 	"bytes"
@@ -13,6 +13,54 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
+
+// Hub maintains the set of active clients and broadcasts messages to the
+// clients.
+type Hub struct {
+	// Registered clients.
+	clients map[*Client]bool
+
+	// Inbound messages from the clients.
+	broadcast chan []byte
+
+	// Register requests from the clients.
+	register chan *Client
+
+	// Unregister requests from clients.
+	unregister chan *Client
+}
+
+func NewHub() *Hub {
+	return &Hub{
+		broadcast:  make(chan []byte),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+		clients:    make(map[*Client]bool),
+	}
+}
+
+func (h *Hub) Run() {
+	for {
+		select {
+		case client := <-h.register:
+			h.clients[client] = true
+		case client := <-h.unregister:
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+		case message := <-h.broadcast:
+			for client := range h.clients {
+				select {
+				case client.send <- message:
+				default:
+					close(client.send)
+					delete(h.clients, client)
+				}
+			}
+		}
+	}
+}
 
 const (
 	// Time allowed to write a message to the peer.
@@ -129,7 +177,7 @@ func (c *Client) writePump() {
 }
 
 // serveWs handles websocket requests from the peer.
-func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -139,6 +187,7 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	client.hub.register <- client
 
 	log.Println("New connection!")
+	log.Println("New client uuid: " + client.uuid.String())
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.

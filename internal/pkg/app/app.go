@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"log"
+	"megachat/internal/app/ws"
 	"net/http"
 	"time"
 )
@@ -17,11 +18,11 @@ func New(ctx context.Context) (*Application, error) {
 func (a *Application) StartServer() {
 	log.Println("Server started")
 
-	hub := newHub()
-	go hub.run()
+	hub := ws.NewHub()
+	go hub.Run()
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		serveWs(hub, w, r)
+		ws.ServeWs(hub, w, r)
 	})
 
 	server := &http.Server{
