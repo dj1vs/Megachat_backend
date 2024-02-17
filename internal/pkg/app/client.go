@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -24,7 +25,7 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 
 	// Maximum message size allowed from peer.
-	maxMessageSize = 512
+	maxMessageSize = 1024
 )
 
 var (
@@ -39,6 +40,8 @@ var upgrader = websocket.Upgrader{
 
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
+	uuid uuid.UUID
+
 	hub *Hub
 
 	// The websocket connection.
@@ -127,8 +130,10 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
+	client := &Client{uuid: uuid.New(), hub: hub, conn: conn, send: make(chan []byte, 256)}
 	client.hub.register <- client
+
+	log.Println("New connection!")
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
