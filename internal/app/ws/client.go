@@ -2,9 +2,11 @@ package ws
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"megachat/internal/app/ds"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -57,8 +59,20 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		write_msg := c.UUID.String() + " " + string(message)
-		log.Println(write_msg)
+
+		var request ds.FrontReq
+
+		err = json.Unmarshal(message, &request)
+
+		if err != nil {
+			c.Hub.Broadcast <- ([]byte(c.UUID.String() + " wrong request!"))
+		} else {
+			log.Println(c.UUID.String() + " is great!")
+			c.Hub.Broadcast <- ([]byte(c.UUID.String() + " your are great"))
+		}
+
+		// msg_bytes := c.UUID.String() + " " + string(message)
+
 		// c.hub.broadcast <- ([]byte(write_msg))
 	}
 }
@@ -89,9 +103,11 @@ func (c *Client) writePump() {
 				return
 			}
 
-			log.Println(string(message))
-
-			w.Write(message)
+			msg_str := string(message)
+			log.Println(strings.Split(msg_str, " "))
+			if strings.Split(msg_str, " ")[0] == c.UUID.String() {
+				w.Write(message)
+			}
 
 			// Add queued chat messages to the current websocket message.
 			n := len(c.Send)
