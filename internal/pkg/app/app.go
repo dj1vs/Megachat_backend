@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"megachat/internal/app/ds"
 	"net/http"
@@ -26,6 +27,11 @@ const (
 
 	// Maximum message size allowed from peer.
 	maxMessageSize = 1024
+
+	// Размер сегмента сообщения в байтах
+	segmentByteSize = 140
+
+	codingURL = "http://127.0.0.1:8000"
 )
 
 var (
@@ -173,6 +179,7 @@ func (a *Application) readPump(c *Client) {
 		} else {
 			log.Println(c.UUID.String() + " is great!")
 			a.Broadcast <- ([]byte(c.UUID.String() + " your are great"))
+			a.SendToCoding(request)
 		}
 
 		// msg_bytes := c.UUID.String() + " " + string(message)
@@ -230,4 +237,61 @@ func (a *Application) writePump(c *Client) {
 			}
 		}
 	}
+}
+
+func (a *Application) SendToCoding(frontReq ds.FrontReq) {
+	byte_segments := a.TextToByteSegments(frontReq.Payload.Data)
+
+	segments_cnt := len(byte_segments)
+	for segment_num, byte_segment := range byte_segments {
+		request := &ds.CodingReq{
+			Username: frontReq.Username,
+			Time:     frontReq.Time,
+			Payload: ds.CodingReqPayload{
+				Data:        byte_segment,
+				Segment_num: int32(segment_num),
+				Segment_cnt: int32(segments_cnt),
+			},
+		}
+
+		jsonRequest, err := json.Marshal(request)
+		if err != nil {
+			fmt.Println("SendToCoding error: ", err)
+			return
+		}
+
+		resp, err := http.Post(codingURL, "application/json", bytes.NewBuffer(jsonRequest))
+		if err != nil {
+			fmt.Println("Error sending request: ", err)
+			return
+		}
+		defer resp.Body.Close()
+	}
+}
+
+func (a *Application) TextToByteSegments(text string) [][]byte {
+	byte_segments := [][]byte{}
+
+	text_bytes := []byte(text)
+
+	for len(text_bytes) > 0 {
+		var byte_segment []byte
+		isLarge := (len(text_bytes) >= segmentByteSize)
+		if isLarge {
+			byte_segment = text_bytes[:segmentByteSize]
+		} else {
+			byte_segment = text_bytes
+		}
+
+		byte_segments = append(byte_segments, byte_segment)
+
+		if isLarge {
+			text_bytes = text_bytes[segmentByteSize:]
+		} else {
+			text_bytes = []byte{}
+		}
+	}
+
+	return byte_segments
+
 }
