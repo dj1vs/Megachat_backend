@@ -4,21 +4,10 @@ import (
 	"context"
 	"log"
 	"net/http"
-
-	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
+	"time"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 type Application struct {
-	r *gin.Engine
 }
 
 func New(ctx context.Context) (*Application, error) {
@@ -28,39 +17,22 @@ func New(ctx context.Context) (*Application, error) {
 func (a *Application) StartServer() {
 	log.Println("Server started")
 
-	a.r = gin.Default()
+	hub := newHub()
+	go hub.run()
 
-	a.r.GET("ws/ping", a.ws_ping)
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(hub, w, r)
+	})
 
-	a.r.Run(":8800")
+	server := &http.Server{
+		Addr:              "127.0.0.1:8800",
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	err := server.ListenAndServe()
+	if err != nil {
+		log.Fatal("Listen and serve:", err)
+	}
 
 	log.Println("Server is down")
-}
-
-func (a *Application) ws_ping(c *gin.Context) {
-	log.Println("ws_ping start")
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		// panic(err)
-		log.Printf("%s, error while Upgrading websocket connection\n", err.Error())
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	defer conn.Close()
-	for {
-		mt, message, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			break
-		}
-
-		// log.Printf("recv: %s, type: %s", message, websocket.)
-		err = conn.WriteMessage(mt, message)
-		if err != nil {
-			log.Println("write:", err)
-			break
-		}
-	}
-
 }
