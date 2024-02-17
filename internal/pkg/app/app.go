@@ -172,14 +172,49 @@ func (a *Application) readPump(c *Client) {
 
 		var request ds.FrontReq
 
+		var response *ds.FrontResp
+
 		err = json.Unmarshal(message, &request)
 
 		if err != nil {
-			a.Broadcast <- ([]byte(c.UUID.String() + " wrong request!"))
+			response = &ds.FrontResp{
+				Username: "",
+				Time:     time.Now(),
+				Payload: ds.FrontRespPayload{
+					Status:  "error",
+					Message: err.Error(),
+				},
+			}
 		} else {
 			log.Println(c.UUID.String() + " is great!")
-			a.Broadcast <- ([]byte(c.UUID.String() + " your are great"))
-			a.SendToCoding(request)
+			err = a.SendToCoding(&request)
+
+			if err != nil {
+				response = &ds.FrontResp{
+					Username: request.Username,
+					Time:     request.Time,
+					Payload: ds.FrontRespPayload{
+						Status:  "error",
+						Message: err.Error(),
+					},
+				}
+			} else {
+				response = &ds.FrontResp{
+					Username: request.Username,
+					Time:     request.Time,
+					Payload: ds.FrontRespPayload{
+						Status:  "ok",
+						Message: "",
+					},
+				}
+			}
+		}
+
+		jsonResponse, err := json.Marshal(response)
+		if err != nil {
+			fmt.Println("Error: ", err)
+		} else {
+			a.Broadcast <- []byte(c.UUID.String() + " " + string(jsonResponse))
 		}
 
 		// msg_bytes := c.UUID.String() + " " + string(message)
@@ -215,9 +250,8 @@ func (a *Application) writePump(c *Client) {
 			}
 
 			msg_str := string(message)
-			log.Println(strings.Split(msg_str, " "))
 			if strings.Split(msg_str, " ")[0] == c.UUID.String() {
-				w.Write(message)
+				w.Write([]byte(string(message)[strings.Index(string(message), " "):]))
 			}
 
 			// Add queued chat messages to the current websocket message.
@@ -239,7 +273,7 @@ func (a *Application) writePump(c *Client) {
 	}
 }
 
-func (a *Application) SendToCoding(frontReq ds.FrontReq) {
+func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 	byte_segments := a.TextToByteSegments(frontReq.Payload.Data)
 
 	segments_cnt := len(byte_segments)
@@ -256,17 +290,19 @@ func (a *Application) SendToCoding(frontReq ds.FrontReq) {
 
 		jsonRequest, err := json.Marshal(request)
 		if err != nil {
-			fmt.Println("SendToCoding error: ", err)
-			return
+			fmt.Println("SendToCoding error marshalling request: ", err)
+			return err
 		}
 
 		resp, err := http.Post(codingURL, "application/json", bytes.NewBuffer(jsonRequest))
 		if err != nil {
-			fmt.Println("Error sending request: ", err)
-			return
+			fmt.Println("SendToCoding error sending request: ", err)
+			return err
 		}
 		defer resp.Body.Close()
 	}
+
+	return nil
 }
 
 func (a *Application) TextToByteSegments(text string) [][]byte {
