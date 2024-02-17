@@ -73,7 +73,9 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.hub.broadcast <- message
+		write_msg := c.uuid.String() + " " + string(message)
+		log.Println(write_msg)
+		// c.hub.broadcast <- ([]byte(write_msg))
 	}
 }
 
@@ -102,6 +104,9 @@ func (c *Client) writePump() {
 			if err != nil {
 				return
 			}
+
+			log.Println(string(message))
+
 			w.Write(message)
 
 			// Add queued chat messages to the current websocket message.
