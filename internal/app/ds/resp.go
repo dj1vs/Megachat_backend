@@ -10,10 +10,10 @@ type FrontRespPayload struct {
 }
 
 type CodingRespPayload struct {
-	Status      string
-	Data        []byte
-	Segment_num int32
-	Segment_cnt int32
+	Status      string `json:"status"`
+	Data        []byte `json:"data"`
+	Segment_num int32  `json:"segment_num"`
+	Segment_cnt int32  `json:"segment_cnt"`
 }
 
 // responses
@@ -25,7 +25,7 @@ type FrontResp struct {
 }
 
 type CodingResp struct {
-	Username string
-	Time     time.Time
-	Payload  CodingRespPayload
+	Username string            `json:"username"`
+	Time     time.Time         `json:"time"`
+	Payload  CodingRespPayload `json:"payload"`
 }

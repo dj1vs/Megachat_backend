@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"megachat/internal/app/ds"
 	"net/http"
@@ -158,11 +159,31 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 
 	if method != http.MethodPost {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprint(w, "You should send POST request")
-	} else {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "OK")
+		//fmt.Fprint(w, "You should send POST request")
+		http.Error(w, "Method not allowed", http.StatusBadRequest)
+		return
 	}
+
+	// Read the request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Error reading request body", http.StatusInternalServerError)
+		return
+	}
+
+	var requestBody ds.CodingResp
+
+	err = json.Unmarshal(body, &requestBody)
+	if err != nil {
+		http.Error(w, "Error unmarshalling json", http.StatusBadRequest)
+		return
+	}
+
+	fmt.Printf("Received JSON: %+v\n", requestBody)
+
+	// TODO: send data to kafka
+
+	fmt.Fprint(w, "OK")
 
 }
 
