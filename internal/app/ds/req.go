@@ -1,7 +1,5 @@
 package ds
 
-import "time"
-
 // payloads
 
 type FrontReqPayload struct {
@@ -18,12 +16,12 @@ type CodingReqPayload struct {
 
 type FrontReq struct {
 	Username string
-	Time     time.Time
+	Time     int64
 	Payload  FrontReqPayload
 }
 
 type CodingReq struct {
 	Username string
-	Time     time.Time
+	Time     int64
 	Payload  CodingReqPayload
 }

@@ -219,7 +219,7 @@ func (a *Application) readPump(c *Client) {
 		if err != nil {
 			response = &ds.FrontResp{
 				Username: "",
-				Time:     time.Now(),
+				Time:     time.Now().Unix(),
 				Payload: ds.FrontRespPayload{
 					Status:  "error",
 					Message: err.Error(),
