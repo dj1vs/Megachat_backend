@@ -88,6 +88,10 @@ func (a *Application) StartServer() {
 		a.ServeWs(w, r)
 	})
 
+	http.HandleFunc("/coding", func(w http.ResponseWriter, r *http.Request) {
+		a.ServeCoding(w, r)
+	})
+
 	a.server = &http.Server{
 		Addr:              "127.0.0.1:8800",
 		ReadHeaderTimeout: 5 * time.Second,
@@ -145,6 +149,21 @@ func (a *Application) ServeWs(w http.ResponseWriter, r *http.Request) {
 	// new goroutines.
 	go a.writePump(client)
 	go a.readPump(client)
+}
+
+func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+
+	method := r.Method
+
+	if method != http.MethodPost {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, "You should send POST request")
+	} else {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "OK")
+	}
+
 }
 
 // readPump pumps messages from the websocket connection to the hub.
