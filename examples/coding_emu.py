@@ -1,19 +1,28 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import requests
+import time
 
 class RequestHandler(BaseHTTPRequestHandler):
     def _set_headers(self):
         self.send_response(200)
-        self.send_header('Content-type', 'application/json')
+        self.send_header('Content-type', 'text/plain')
         self.end_headers()
 
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
 
+        # Wait for 3 seconds
+        time.sleep(3)
+
+        # Forward the received request to another URL
+        response = requests.post("http://127.0.0.1:8800/coding", data=post_data)
+
+        # Set response headers
         self._set_headers()
-        print("Received POST request data:")
-        print(post_data.decode('utf-8'))  # Print received data
-        return
+
+        # Send the response from the destination URL back to the client
+        self.wfile.write(response.content)
 
 def run(server_class=HTTPServer, handler_class=RequestHandler, port=8000):
     server_address = ('', port)

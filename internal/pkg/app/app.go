@@ -9,9 +9,12 @@ import (
 	"log"
 	"megachat/internal/app/ds"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/IBM/sarama"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -45,6 +48,9 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+var responseChannels map[string]chan *sarama.ConsumerMessage
+var mu sync.Mutex
+
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
 	UUID uuid.UUID
@@ -72,12 +78,49 @@ type Application struct {
 }
 
 func New(ctx context.Context) (*Application, error) {
+	responseChannels = make(map[string]chan *sarama.ConsumerMessage)
+
+	a := &Application{
+		Broadcast:  make(chan []byte),
+		Register:   make(chan *Client),
+		Unregister: make(chan *Client),
+		Clients:    make(map[*Client]bool),
+	}
+
+	go a.kafkaConsumeRoutine()
+
 	return &Application{
 		Broadcast:  make(chan []byte),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
 		Clients:    make(map[*Client]bool),
 	}, nil
+}
+
+func (a *Application) kafkaConsumeRoutine() {
+	consumer, err := sarama.NewConsumer([]string{"127.0.0.1:9092"}, sarama.NewConfig())
+	if err != nil {
+		log.Fatalf("Failed to create Kafka consumer: %v", err)
+	} else {
+		log.Println("Kafka consumer created")
+	}
+
+	partConsumer, err := consumer.ConsumePartition("quickstart-events", 0, sarama.OffsetOldest)
+	if err != nil {
+		log.Fatalf("Failed to consume partition: %v", err)
+	} else {
+		log.Println("Partition consumed")
+	}
+	defer partConsumer.Close()
+
+	for {
+		select {
+		case msg := <-partConsumer.Messages():
+			fmt.Println("Received message:", string(msg.Value))
+		case <-time.After(5 * time.Second):
+			fmt.Println("No messages received for 5 seconds")
+		}
+	}
 }
 
 func (a *Application) StartServer() {
@@ -179,11 +222,26 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("Received JSON: %+v\n", requestBody)
+	// SEND JSON TO KAFKA
+
+	producer, err := sarama.NewSyncProducer([]string{"127.0.0.1:9092"}, nil)
+	if err != nil {
+		log.Fatalf("Failed to create Kafka producer: %v", err)
+	}
+	defer producer.Close()
+
+	kafka_request := &sarama.ProducerMessage{
+		Topic: "quickstart-events",
+		Key:   sarama.StringEncoder(strconv.FormatInt(requestBody.Time, 10)),
+		Value: sarama.ByteEncoder(body),
+	}
+
+	_, _, err = producer.SendMessage(kafka_request)
+	if err != nil {
+		log.Printf("Failed to send message to mr. Kafka: %v", err)
+	}
 
 	// TODO: send data to kafka
-
-	fmt.Fprint(w, "OK")
 
 }
 
