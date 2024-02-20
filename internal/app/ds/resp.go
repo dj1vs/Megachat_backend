@@ -3,8 +3,8 @@ package ds
 // payloads
 
 type FrontRespPayload struct {
-	Status  string
-	Message string
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 type CodingRespPayload struct {
@@ -17,9 +17,9 @@ type CodingRespPayload struct {
 // responses
 
 type FrontResp struct {
-	Username string
-	Time     int64
-	Payload  FrontRespPayload
+	Username string           `json:"username"`
+	Time     int64            `json:"time"`
+	Payload  FrontRespPayload `json:"payload"`
 }
 
 type CodingResp struct {

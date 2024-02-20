@@ -1,19 +1,17 @@
 package ds
 
-import "time"
-
 // payloads
 
 type FrontMsgPayload struct {
-	Status  string
-	Message string
-	Data    string
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Data    string `json:"data"`
 }
 
 // messages
 
 type FrontMsg struct {
-	Username string
-	Time     time.Time
-	Payload  FrontMsgPayload
+	Username string          `json:"username"`
+	Time     int64           `json:"time"`
+	Payload  FrontMsgPayload `json:"payload"`
 }

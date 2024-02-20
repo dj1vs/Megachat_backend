@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -35,7 +34,9 @@ const (
 	// Размер сегмента сообщения в байтах
 	segmentByteSize = 140
 
-	codingURL = "http://127.0.0.1:8000"
+	codingURL = "http://192.168.207.207:3000/serv/"
+
+	kafkaURL = "172.23.80.195:9092"
 )
 
 var (
@@ -46,10 +47,14 @@ var (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
-var responseChannels map[string]chan *sarama.ConsumerMessage
-var mu sync.Mutex
+var numberToUUID map[int64]uuid.UUID
+var kafkaSlices map[int64][][]byte
 
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
@@ -78,7 +83,8 @@ type Application struct {
 }
 
 func New(ctx context.Context) (*Application, error) {
-	responseChannels = make(map[string]chan *sarama.ConsumerMessage)
+
+	numberToUUID = make(map[int64]uuid.UUID)
 
 	a := &Application{
 		Broadcast:  make(chan []byte),
@@ -86,6 +92,8 @@ func New(ctx context.Context) (*Application, error) {
 		Unregister: make(chan *Client),
 		Clients:    make(map[*Client]bool),
 	}
+
+	kafkaSlices = make(map[int64][][]byte, 0)
 
 	go a.kafkaConsumeRoutine()
 
@@ -98,14 +106,21 @@ func New(ctx context.Context) (*Application, error) {
 }
 
 func (a *Application) kafkaConsumeRoutine() {
-	consumer, err := sarama.NewConsumer([]string{"127.0.0.1:9092"}, sarama.NewConfig())
+	sarama_config := sarama.NewConfig()
+	sarama_config.Consumer.Return.Errors = true
+
+	brokers := []string{kafkaURL}
+	topics := []string{"megachat"}
+
+	consumer, err := sarama.NewConsumer(brokers, sarama_config)
 	if err != nil {
 		log.Fatalf("Failed to create Kafka consumer: %v", err)
 	} else {
 		log.Println("Kafka consumer created")
 	}
+	defer consumer.Close()
 
-	partConsumer, err := consumer.ConsumePartition("quickstart-events", 0, sarama.OffsetOldest)
+	partConsumer, err := consumer.ConsumePartition(topics[0], 0, sarama.OffsetNewest)
 	if err != nil {
 		log.Fatalf("Failed to consume partition: %v", err)
 	} else {
@@ -116,7 +131,41 @@ func (a *Application) kafkaConsumeRoutine() {
 	for {
 		select {
 		case msg := <-partConsumer.Messages():
-			fmt.Println("Received message:", string(msg.Value))
+			var kafkaMsg ds.CodingResp
+
+			err := json.Unmarshal(msg.Value, &kafkaMsg)
+			if err != nil {
+				log.Println("Can't unmarshal kafka msg")
+			}
+
+			_, ok := kafkaSlices[kafkaMsg.Time]
+			if !ok {
+				kafkaSlices[kafkaMsg.Time] = make([][]byte, kafkaMsg.Payload.Segment_cnt)
+			}
+
+			ws_msg := &ds.FrontMsg{
+				Username: kafkaMsg.Username,
+				Time:     kafkaMsg.Time,
+				Payload: ds.FrontMsgPayload{
+					Status:  "ok",
+					Message: "",
+					Data:    string(kafkaMsg.Payload.Data),
+				},
+			}
+
+			json_ws_msg, err := json.Marshal(ws_msg)
+			if err != nil {
+				log.Println(err)
+			}
+
+			kafkaSlices[kafkaMsg.Time][kafkaMsg.Payload.Segment_num] = kafkaMsg.Payload.Data
+
+			fmt.Println("Received message from Kafka:", string(msg.Value))
+
+			go func() {
+				a.Broadcast <- []byte(numberToUUID[kafkaMsg.Time].String() + " " + string(json_ws_msg))
+			}()
+
 		case <-time.After(5 * time.Second):
 			fmt.Println("No messages received for 5 seconds")
 		}
@@ -137,7 +186,7 @@ func (a *Application) StartServer() {
 	})
 
 	a.server = &http.Server{
-		Addr:              "127.0.0.1:8800",
+		Addr:              "0.0.0.0:8800",
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -174,6 +223,9 @@ func (a *Application) RunWS() {
 
 // serveWs handles websocket requests from the peer.
 func (a *Application) ServeWs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	r.Header.Set("Access-Control-Allow-Origin", "*")
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -196,14 +248,15 @@ func (a *Application) ServeWs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "text/plain")
 
 	method := r.Method
 
 	if method != http.MethodPost {
-		w.WriteHeader(http.StatusBadRequest)
 		//fmt.Fprint(w, "You should send POST request")
 		http.Error(w, "Method not allowed", http.StatusBadRequest)
+		// w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -218,20 +271,23 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(body, &requestBody)
 	if err != nil {
-		http.Error(w, "Error unmarshalling json", http.StatusBadRequest)
+		log.Println(err)
 		return
 	}
 
 	// SEND JSON TO KAFKA
 
-	producer, err := sarama.NewSyncProducer([]string{"127.0.0.1:9092"}, nil)
+	sarama_config := sarama.NewConfig()
+	sarama_config.Producer.Return.Successes = true
+
+	producer, err := sarama.NewSyncProducer([]string{kafkaURL}, sarama_config)
 	if err != nil {
 		log.Fatalf("Failed to create Kafka producer: %v", err)
 	}
 	defer producer.Close()
 
 	kafka_request := &sarama.ProducerMessage{
-		Topic: "quickstart-events",
+		Topic: "megachat",
 		Key:   sarama.StringEncoder(strconv.FormatInt(requestBody.Time, 10)),
 		Value: sarama.ByteEncoder(body),
 	}
@@ -284,7 +340,6 @@ func (a *Application) readPump(c *Client) {
 				},
 			}
 		} else {
-			log.Println(c.UUID.String() + " is great!")
 			err = a.SendToCoding(&request)
 
 			if err != nil {
@@ -297,6 +352,7 @@ func (a *Application) readPump(c *Client) {
 					},
 				}
 			} else {
+				numberToUUID[request.Time] = c.UUID
 				response = &ds.FrontResp{
 					Username: request.Username,
 					Time:     request.Time,
