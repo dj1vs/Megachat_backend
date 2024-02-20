@@ -101,20 +101,15 @@ func New(ctx context.Context) (*Application, error) {
 
 	go a.kafkaConsumeRoutine()
 
-	return &Application{
-		Broadcast:  make(chan []byte),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		Clients:    make(map[*Client]bool),
-	}, nil
+	return a, nil
 }
 
 func (a *Application) kafkaConsumeRoutine() {
 	sarama_config := sarama.NewConfig()
 	sarama_config.Consumer.Return.Errors = true
 
-	brokers := []string{a.config.Kafka.Host + ":" + strconv.Itoa(a.config.Kafka.Port)}
-	topics := []string{a.config.Kafka.Topic}
+	brokers := []string{a.config.KafkaHost + ":" + strconv.Itoa(a.config.KafkaPort)}
+	topics := []string{a.config.KafkaTopic}
 
 	consumer, err := sarama.NewConsumer(brokers, sarama_config)
 	if err != nil {
@@ -190,7 +185,7 @@ func (a *Application) StartServer() {
 	})
 
 	a.server = &http.Server{
-		Addr:              a.config.Server.Host + ":" + strconv.Itoa(a.config.Server.Port),
+		Addr:              a.config.ServerHost + ":" + strconv.Itoa(a.config.ServerPort),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -284,7 +279,7 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 	sarama_config := sarama.NewConfig()
 	sarama_config.Producer.Return.Successes = true
 
-	producer, err := sarama.NewSyncProducer([]string{a.config.Kafka.Host + ":" + strconv.Itoa(a.config.Kafka.Port)}, sarama_config)
+	producer, err := sarama.NewSyncProducer([]string{a.config.KafkaHost + ":" + strconv.Itoa(a.config.KafkaPort)}, sarama_config)
 	if err != nil {
 		log.Fatalf("Failed to create Kafka producer: %v", err)
 	}
@@ -452,7 +447,7 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 			return err
 		}
 
-		condingServiceURL := a.config.CodingService.Host + ":" + strconv.Itoa(a.config.CodingService.Port) + "/serv"
+		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/serv"
 
 		resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 		if err != nil {

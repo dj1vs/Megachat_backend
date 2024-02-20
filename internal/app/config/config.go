@@ -8,27 +8,16 @@ import (
 	"github.com/spf13/viper"
 )
 
-type KafkaConfig struct {
-	Host  string `json:"host"`
-	Port  int    `json:"port"`
-	Topic string `json:"topic"`
-}
-
-type CodingServiceConfig struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
-}
-
-type ServerConfig struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
-}
-
 type Config struct {
-	Server ServerConfig `json:"server"`
+	ServerHost string
+	ServerPort int
 
-	Kafka         KafkaConfig         `json:"kafka"`
-	CodingService CodingServiceConfig `json:"coding_service"`
+	CodingHost string
+	CodingPort int
+
+	KafkaHost  string
+	KafkaPort  int
+	KafkaTopic string
 }
 
 func NewConfig(ctx context.Context) (*Config, error) {
