@@ -11,7 +11,6 @@ import (
 	"megachat/internal/app/ds"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -157,10 +156,10 @@ func (a *Application) kafkaConsumeRoutine() {
 
 			a.kafkaSlices[kafkaMsg.Time][kafkaMsg.Payload.Segment_num] = kafkaMsg.Payload.Data
 
-			fmt.Println("Received message from Kafka:", string(msg.Value))
+			// fmt.Println("Received message from Kafka:", string(msg.Value))
 
 			go func() {
-				a.Broadcast <- []byte(a.numberToUUID[kafkaMsg.Time].String() + " " + string(json_ws_msg))
+				a.Broadcast <- json_ws_msg
 			}()
 
 		case <-time.After(5 * time.Second):
@@ -235,8 +234,7 @@ func (a *Application) ServeWs(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Register <- client
 
-	log.Println("New connection!")
-	log.Println("New client uuid: " + client.UUID.String())
+	log.Println("New connection! UUID: " + client.UUID.String())
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
@@ -337,6 +335,7 @@ func (a *Application) readPump(c *Client) {
 				},
 			}
 		} else {
+			a.numberToUUID[request.Time] = c.UUID
 			err = a.SendToCoding(&request)
 
 			if err != nil {
@@ -349,7 +348,6 @@ func (a *Application) readPump(c *Client) {
 					},
 				}
 			} else {
-				a.numberToUUID[request.Time] = c.UUID
 				response = &ds.FrontResp{
 					Username: request.Username,
 					Time:     request.Time,
@@ -359,13 +357,14 @@ func (a *Application) readPump(c *Client) {
 					},
 				}
 			}
+
 		}
 
 		jsonResponse, err := json.Marshal(response)
 		if err != nil {
 			fmt.Println("Error: ", err)
 		} else {
-			a.Broadcast <- []byte(c.UUID.String() + " " + string(jsonResponse))
+			a.Broadcast <- jsonResponse
 		}
 
 		// msg_bytes := c.UUID.String() + " " + string(message)
@@ -395,15 +394,29 @@ func (a *Application) writePump(c *Client) {
 				return
 			}
 
+			var jsonMessage ds.FrontMsg
+			err := json.Unmarshal(message, &jsonMessage)
+			if err != nil {
+				log.Println("Can't unmarshall ws message!")
+				continue
+			}
+
+			messageTime := jsonMessage.Time
+
+			senderUUID, ok := a.numberToUUID[messageTime]
+
+			if !ok ||
+				((jsonMessage.Payload.Data == "") && (senderUUID != c.UUID)) ||
+				((jsonMessage.Payload.Data != "") && (senderUUID == c.UUID)) {
+				continue
+			}
+
 			w, err := c.Conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				return
 			}
 
-			msg_str := string(message)
-			if strings.Split(msg_str, " ")[0] == c.UUID.String() {
-				w.Write([]byte(string(message)[strings.Index(string(message), " "):]))
-			}
+			w.Write(message)
 
 			// Add queued chat messages to the current websocket message.
 			n := len(c.Send)

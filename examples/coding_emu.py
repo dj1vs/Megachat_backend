@@ -13,7 +13,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         post_data = self.rfile.read(content_length)
 
         # Wait for 3 seconds
-        time.sleep(3)
+        time.sleep(1)
 
         # Forward the received request to another URL
         response = requests.post("http://127.0.0.1:8800/coding", data=post_data)
