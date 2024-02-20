@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"megachat/internal/app/config"
 	"megachat/internal/app/ds"
 	"net/http"
 	"strconv"
@@ -33,10 +34,6 @@ const (
 
 	// Размер сегмента сообщения в байтах
 	segmentByteSize = 140
-
-	codingURL = "http://192.168.207.207:3000/serv/"
-
-	kafkaURL = "172.23.80.195:9092"
 )
 
 var (
@@ -67,6 +64,8 @@ type Client struct {
 	Send chan []byte
 }
 type Application struct {
+	config *config.Config
+
 	server *http.Server
 
 	// Registered clients.
@@ -83,10 +82,15 @@ type Application struct {
 }
 
 func New(ctx context.Context) (*Application, error) {
+	cfg, err := config.NewConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	numberToUUID = make(map[int64]uuid.UUID)
 
 	a := &Application{
+		config:     cfg,
 		Broadcast:  make(chan []byte),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
@@ -109,8 +113,8 @@ func (a *Application) kafkaConsumeRoutine() {
 	sarama_config := sarama.NewConfig()
 	sarama_config.Consumer.Return.Errors = true
 
-	brokers := []string{kafkaURL}
-	topics := []string{"megachat"}
+	brokers := []string{a.config.Kafka.Host + ":" + strconv.Itoa(a.config.Kafka.Port)}
+	topics := []string{a.config.Kafka.Topic}
 
 	consumer, err := sarama.NewConsumer(brokers, sarama_config)
 	if err != nil {
@@ -186,7 +190,7 @@ func (a *Application) StartServer() {
 	})
 
 	a.server = &http.Server{
-		Addr:              "0.0.0.0:8800",
+		Addr:              a.config.Server.Host + ":" + strconv.Itoa(a.config.Server.Port),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -280,7 +284,7 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 	sarama_config := sarama.NewConfig()
 	sarama_config.Producer.Return.Successes = true
 
-	producer, err := sarama.NewSyncProducer([]string{kafkaURL}, sarama_config)
+	producer, err := sarama.NewSyncProducer([]string{a.config.Kafka.Host + ":" + strconv.Itoa(a.config.Kafka.Port)}, sarama_config)
 	if err != nil {
 		log.Fatalf("Failed to create Kafka producer: %v", err)
 	}
@@ -448,7 +452,9 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 			return err
 		}
 
-		resp, err := http.Post(codingURL, "application/json", bytes.NewBuffer(jsonRequest))
+		condingServiceURL := a.config.CodingService.Host + ":" + strconv.Itoa(a.config.CodingService.Port) + "/serv"
+
+		resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 		if err != nil {
 			fmt.Println("SendToCoding error sending request: ", err)
 			return err
