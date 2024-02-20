@@ -50,9 +50,6 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-var numberToUUID map[int64]uuid.UUID
-var kafkaSlices map[int64][][]byte
-
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
 	UUID uuid.UUID
@@ -79,6 +76,9 @@ type Application struct {
 
 	// Unregister requests from clients.
 	Unregister chan *Client
+
+	numberToUUID map[int64]uuid.UUID
+	kafkaSlices  map[int64][][]byte
 }
 
 func New(ctx context.Context) (*Application, error) {
@@ -87,17 +87,15 @@ func New(ctx context.Context) (*Application, error) {
 		return nil, err
 	}
 
-	numberToUUID = make(map[int64]uuid.UUID)
-
 	a := &Application{
-		config:     cfg,
-		Broadcast:  make(chan []byte),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-		Clients:    make(map[*Client]bool),
+		config:       cfg,
+		Broadcast:    make(chan []byte),
+		Register:     make(chan *Client),
+		Unregister:   make(chan *Client),
+		Clients:      make(map[*Client]bool),
+		numberToUUID: make(map[int64]uuid.UUID),
+		kafkaSlices:  make(map[int64][][]byte, 0),
 	}
-
-	kafkaSlices = make(map[int64][][]byte, 0)
 
 	go a.kafkaConsumeRoutine()
 
@@ -137,9 +135,9 @@ func (a *Application) kafkaConsumeRoutine() {
 				log.Println("Can't unmarshal kafka msg")
 			}
 
-			_, ok := kafkaSlices[kafkaMsg.Time]
+			_, ok := a.kafkaSlices[kafkaMsg.Time]
 			if !ok {
-				kafkaSlices[kafkaMsg.Time] = make([][]byte, kafkaMsg.Payload.Segment_cnt)
+				a.kafkaSlices[kafkaMsg.Time] = make([][]byte, kafkaMsg.Payload.Segment_cnt)
 			}
 
 			ws_msg := &ds.FrontMsg{
@@ -157,12 +155,12 @@ func (a *Application) kafkaConsumeRoutine() {
 				log.Println(err)
 			}
 
-			kafkaSlices[kafkaMsg.Time][kafkaMsg.Payload.Segment_num] = kafkaMsg.Payload.Data
+			a.kafkaSlices[kafkaMsg.Time][kafkaMsg.Payload.Segment_num] = kafkaMsg.Payload.Data
 
 			fmt.Println("Received message from Kafka:", string(msg.Value))
 
 			go func() {
-				a.Broadcast <- []byte(numberToUUID[kafkaMsg.Time].String() + " " + string(json_ws_msg))
+				a.Broadcast <- []byte(a.numberToUUID[kafkaMsg.Time].String() + " " + string(json_ws_msg))
 			}()
 
 		case <-time.After(5 * time.Second):
@@ -351,7 +349,7 @@ func (a *Application) readPump(c *Client) {
 					},
 				}
 			} else {
-				numberToUUID[request.Time] = c.UUID
+				a.numberToUUID[request.Time] = c.UUID
 				response = &ds.FrontResp{
 					Username: request.Username,
 					Time:     request.Time,
