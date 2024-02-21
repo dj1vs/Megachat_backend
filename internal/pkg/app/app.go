@@ -76,8 +76,10 @@ type Application struct {
 	// Unregister requests from clients.
 	Unregister chan *Client
 
-	numberToUUID map[int64]uuid.UUID
-	kafkaSlices  map[int64][][]byte
+	numberToUUID            map[int64]uuid.UUID
+	kafkaSlices             map[int64][][]byte
+	kafkaSlicesSegments     map[int64]int64
+	kafkaSlicesPrevSegments map[int64]int64
 }
 
 func New(ctx context.Context) (*Application, error) {
@@ -87,13 +89,15 @@ func New(ctx context.Context) (*Application, error) {
 	}
 
 	a := &Application{
-		config:       cfg,
-		Broadcast:    make(chan []byte),
-		Register:     make(chan *Client),
-		Unregister:   make(chan *Client),
-		Clients:      make(map[*Client]bool),
-		numberToUUID: make(map[int64]uuid.UUID),
-		kafkaSlices:  make(map[int64][][]byte, 0),
+		config:                  cfg,
+		Broadcast:               make(chan []byte),
+		Register:                make(chan *Client),
+		Unregister:              make(chan *Client),
+		Clients:                 make(map[*Client]bool),
+		numberToUUID:            make(map[int64]uuid.UUID),
+		kafkaSlices:             make(map[int64][][]byte, 0),
+		kafkaSlicesSegments:     make(map[int64]int64),
+		kafkaSlicesPrevSegments: make(map[int64]int64),
 	}
 
 	go a.kafkaConsumeRoutine()
@@ -127,40 +131,63 @@ func (a *Application) kafkaConsumeRoutine() {
 	for {
 		select {
 		case msg := <-partConsumer.Messages():
+			// create kafkaMsg var
 			var kafkaMsg ds.CodingResp
 
+			// try to unmarshall kafkaMsg
 			err := json.Unmarshal(msg.Value, &kafkaMsg)
 			if err != nil {
 				log.Println("Can't unmarshal kafka msg")
 			}
 
+			// get existing kafka slices
 			_, ok := a.kafkaSlices[kafkaMsg.Time]
 			if !ok {
+				// create new kafkaSlices object
 				a.kafkaSlices[kafkaMsg.Time] = make([][]byte, kafkaMsg.Payload.Segment_cnt)
+
+				a.kafkaSlicesSegments[kafkaMsg.Time] = 1
+				a.kafkaSlicesPrevSegments[kafkaMsg.Time] = 0
+
+				a.kafkaSlices[kafkaMsg.Time][kafkaMsg.Payload.Segment_num] = kafkaMsg.Payload.Data
+			} else {
+				a.kafkaSlices[kafkaMsg.Time][kafkaMsg.Payload.Segment_num] = kafkaMsg.Payload.Data
+				a.kafkaSlicesPrevSegments[kafkaMsg.Time] = a.kafkaSlicesSegments[kafkaMsg.Time]
+				a.kafkaSlicesSegments[kafkaMsg.Time] += 1
+
+				if a.kafkaSlicesSegments[kafkaMsg.Time] == int64(kafkaMsg.Payload.Segment_cnt) {
+					ws_msg_payload := make([]byte, 0)
+					for _, seg := range a.kafkaSlices[kafkaMsg.Time] {
+						ws_msg_payload = append(ws_msg_payload, seg...)
+					}
+
+					a.kafkaSlices[kafkaMsg.Time] = make([][]byte, 0)
+					delete(a.kafkaSlicesSegments, kafkaMsg.Time)
+					delete(a.kafkaSlicesPrevSegments, kafkaMsg.Time)
+
+					ws_msg := &ds.FrontMsg{
+						Username: kafkaMsg.Username,
+						Time:     kafkaMsg.Time,
+						Payload: ds.FrontMsgPayload{
+							Status:  "ok",
+							Message: "",
+							Data:    string(ws_msg_payload),
+						},
+					}
+
+					json_ws_msg, err := json.Marshal(ws_msg)
+					if err != nil {
+						log.Println(err)
+					}
+
+					// fmt.Println("Received message from Kafka:", string(msg.Value))
+
+					go func() {
+						a.Broadcast <- json_ws_msg
+					}()
+
+				}
 			}
-
-			ws_msg := &ds.FrontMsg{
-				Username: kafkaMsg.Username,
-				Time:     kafkaMsg.Time,
-				Payload: ds.FrontMsgPayload{
-					Status:  "ok",
-					Message: "",
-					Data:    string(kafkaMsg.Payload.Data),
-				},
-			}
-
-			json_ws_msg, err := json.Marshal(ws_msg)
-			if err != nil {
-				log.Println(err)
-			}
-
-			a.kafkaSlices[kafkaMsg.Time][kafkaMsg.Payload.Segment_num] = kafkaMsg.Payload.Data
-
-			// fmt.Println("Received message from Kafka:", string(msg.Value))
-
-			go func() {
-				a.Broadcast <- json_ws_msg
-			}()
 
 		case <-time.After(5 * time.Second):
 			fmt.Println("No messages received for 5 seconds")
@@ -458,7 +485,7 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 			return err
 		}
 
-		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/serv"
+		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) // +serv
 
 		resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 		if err != nil {
