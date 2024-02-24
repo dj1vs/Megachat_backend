@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"megachat/internal/app/ds"
 	"strconv"
@@ -12,8 +11,10 @@ import (
 )
 
 type KafkaPayload struct {
-	Slices   map[int64][][]byte
-	Segments map[int64]int64
+	Slices      map[int64][][]byte
+	Segments    map[int64]int64
+	LastUpdated map[int64]time.Time
+	SliceSender map[int64]string
 }
 
 func (a *Application) ListenForRecentKafkaMessages() {
@@ -46,10 +47,12 @@ func (a *Application) ListenForRecentKafkaMessages() {
 			if err != nil {
 				log.Println(err)
 			}
-		case <-time.After(5 * time.Second):
-			fmt.Println("No messages received for 5 seconds")
+		case <-time.After(a.config.KafkaTimeout):
+			continue
 		}
+
 	}
+
 }
 
 func (a *Application) ProcessKafkaMessage(msg *sarama.ConsumerMessage) error {
@@ -87,21 +90,33 @@ func (a *Application) ProcessNewKafkaSlice(msg *ds.CodingResp) {
 
 	// save first segment
 	a.kp.Slices[sliceID][segNum] = segData
+
+	a.kp.SliceSender[sliceID] = msg.Username
+
+	a.kp.LastUpdated[sliceID] = time.Now()
 }
 
-// TODO: check if segments have errors
-// TODO: check if some slices are missing
 func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 	sliceID := msg.Time
 	segCount := msg.Payload.Segment_cnt
 	segNum := msg.Payload.Segment_num
 	segData := msg.Payload.Data
+	segStatus := msg.Payload.Status
+
+	if segStatus != "ok" {
+		err := a.SendKafkaSliceError(sliceID, a.kp.SliceSender[sliceID])
+		a.DeleteSlice(sliceID)
+
+		return err
+	}
 
 	// save segment
 	a.kp.Slices[sliceID][segNum] = segData
 
 	// update segments data
 	a.kp.Segments[sliceID]++
+
+	a.kp.LastUpdated[sliceID] = time.Now()
 
 	// check if we got all slice segments
 	if a.kp.Segments[sliceID] == int64(segCount) {
@@ -114,19 +129,20 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 	return nil
 }
 func (a *Application) SendKafkaSlice(sliceID int64, username string) error {
-	msgPayload := make([]byte, 0)
-	for _, seg := range a.kp.Slices[sliceID] {
-		msgPayload = append(msgPayload, seg...)
-	}
-
 	msg := &ds.FrontMsg{
 		Username: username,
 		Time:     sliceID,
-		Payload: ds.FrontMsgPayload{
-			Status:  "ok",
-			Message: "",
-			Data:    string(msgPayload),
-		},
+	}
+
+	msgData := make([]byte, 0)
+	for _, seg := range a.kp.Slices[sliceID] {
+		msgData = append(msgData, seg...)
+	}
+
+	msg.Payload = ds.FrontMsgPayload{
+		Status:  "ok",
+		Message: "",
+		Data:    string(msgData),
 	}
 
 	msgJSON, err := json.Marshal(msg)
@@ -139,4 +155,70 @@ func (a *Application) SendKafkaSlice(sliceID int64, username string) error {
 	}()
 
 	return nil
+}
+
+func (a *Application) SendKafkaSliceLost(sliceID int64, username string) error {
+	msg := &ds.FrontMsg{
+		Username: username,
+		Time:     sliceID,
+	}
+
+	msg.Payload = ds.FrontMsgPayload{
+		Status:  "error",
+		Message: "Часть сообщения потеряна",
+		Data:    "",
+	}
+
+	msgJSON, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		a.Broadcast <- msgJSON
+	}()
+
+	return nil
+}
+
+func (a *Application) SendKafkaSliceError(sliceID int64, username string) error {
+	msg := &ds.FrontMsg{
+		Username: username,
+		Time:     sliceID,
+	}
+
+	msg.Payload = ds.FrontMsgPayload{
+		Status:  "error",
+		Message: "Произошла ошибка при декодировании одного изсегментов сообщения",
+		Data:    "",
+	}
+
+	msgJSON, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		a.Broadcast <- msgJSON
+	}()
+
+	return nil
+}
+
+func (a *Application) DeleteSlice(sliceID int64) {
+	delete(a.numberToUUID, sliceID)
+
+	delete(a.kp.Slices, sliceID)
+	delete(a.kp.LastUpdated, sliceID)
+	delete(a.kp.Segments, sliceID)
+	delete(a.kp.SliceSender, sliceID)
+}
+
+func (a *Application) CheckLostSlices() {
+	for sliceID := range a.kp.LastUpdated {
+		if a.kp.LastUpdated[sliceID].Add(a.config.KafkaTimeout).Compare(time.Now()) == -1 {
+			a.SendKafkaSliceLost(sliceID, a.kp.SliceSender[sliceID])
+			a.DeleteSlice(sliceID)
+		}
+	}
 }

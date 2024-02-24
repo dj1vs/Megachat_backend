@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
@@ -15,9 +16,10 @@ type Config struct {
 	CodingHost string
 	CodingPort int
 
-	KafkaHost  string
-	KafkaPort  int
-	KafkaTopic string
+	KafkaHost    string
+	KafkaPort    int
+	KafkaTopic   string
+	KafkaTimeout time.Duration
 }
 
 func NewConfig(ctx context.Context) (*Config, error) {

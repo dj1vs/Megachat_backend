@@ -71,6 +71,7 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(body, &requestBody)
 	if err != nil {
+		log.Println("Невозможно распознать сообщение от сервиса кодирования:")
 		log.Println(err)
 		return
 	}

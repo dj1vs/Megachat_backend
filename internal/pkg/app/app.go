@@ -89,8 +89,10 @@ func New(ctx context.Context) (*Application, error) {
 		Clients:      make(map[*Client]bool),
 		numberToUUID: make(map[int64]uuid.UUID),
 		kp: &KafkaPayload{
-			Slices:   make(map[int64][][]byte, 0),
-			Segments: make(map[int64]int64),
+			Slices:      make(map[int64][][]byte, 0),
+			Segments:    make(map[int64]int64, 0),
+			LastUpdated: make(map[int64]time.Time, 0),
+			SliceSender: make(map[int64]string, 0),
 		},
 	}
 

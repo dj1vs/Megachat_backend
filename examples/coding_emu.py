@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import requests
 import time
+import json
 
 class RequestHandler(BaseHTTPRequestHandler):
     def _set_headers(self):
@@ -11,6 +12,11 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
+
+        # json_data = json.loads(post_data)
+        # json_data['payload']['status'] = 'ok'
+
+        # print(json_data)
 
         # Forward the received request to another URL
         response = requests.post("http://127.0.0.1:8800/coding", data=post_data)
