@@ -98,6 +98,13 @@ func New(ctx context.Context) (*Application, error) {
 
 	go a.ListenForRecentKafkaMessages()
 
+	go func() {
+		for {
+			a.CheckLostSlices()
+			time.Sleep(a.config.KafkaTimeout)
+		}
+	}()
+
 	return a, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"log"
 	"megachat/internal/app/ds"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -19,6 +20,7 @@ const (
 )
 
 type KafkaPayload struct {
+	Mutex       sync.Mutex
 	Slices      map[int64][][]byte
 	Segments    map[int64]int64
 	LastUpdated map[int64]time.Time
@@ -51,10 +53,12 @@ func (a *Application) ListenForRecentKafkaMessages() {
 	for {
 		select {
 		case msg := <-partConsumer.Messages():
+			a.kp.Mutex.Lock()
 			err = a.ProcessKafkaMessage(msg)
 			if err != nil {
 				log.Println(err)
 			}
+			a.kp.Mutex.Unlock()
 		case <-time.After(a.config.KafkaTimeout):
 			continue
 		}
@@ -64,6 +68,7 @@ func (a *Application) ListenForRecentKafkaMessages() {
 }
 
 func (a *Application) ProcessKafkaMessage(msg *sarama.ConsumerMessage) error {
+
 	var codingResp ds.CodingResp
 
 	err := json.Unmarshal(msg.Value, &codingResp)
@@ -109,17 +114,16 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 	segCount := msg.Payload.Segment_cnt
 	segNum := msg.Payload.Segment_num
 	segData := msg.Payload.Data
-	segStatus := msg.Payload.Status
 
-	if segStatus != "ok" {
-		err := a.SendKafkaSlice(sliceID, Error)
-		a.DeleteSlice(sliceID)
-
-		return err
-	}
+	a.kp.Slices[sliceID][segNum] = segData
 
 	// save segment
-	a.kp.Slices[sliceID][segNum] = segData
+	// segStatus := msg.Payload.Status
+	// if segStatus == "" {
+	//
+	// } else {
+	// 	a.kp.Slices[sliceID][segNum] = nil
+	// }
 
 	// update segments data
 	a.kp.Segments[sliceID]++
@@ -128,7 +132,17 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 
 	// check if we got all slice segments
 	if a.kp.Segments[sliceID] == int64(segCount) {
-		err := a.SendKafkaSlice(sliceID, Success)
+		isFail := a.SliceHasErrors(sliceID)
+
+		var err error
+		if !isFail {
+			err = a.SendKafkaSlice(sliceID, Success)
+		} else {
+			err = a.SendKafkaSlice(sliceID, Error)
+		}
+
+		a.DeleteSlice(sliceID)
+
 		if err != nil {
 			return err
 		}
@@ -181,8 +195,6 @@ func (a *Application) SendKafkaSlice(sliceID int64, status KafkaSliceStatus) err
 }
 
 func (a *Application) DeleteSlice(sliceID int64) {
-	delete(a.numberToUUID, sliceID)
-
 	delete(a.kp.Slices, sliceID)
 	delete(a.kp.LastUpdated, sliceID)
 	delete(a.kp.Segments, sliceID)
@@ -190,10 +202,24 @@ func (a *Application) DeleteSlice(sliceID int64) {
 }
 
 func (a *Application) CheckLostSlices() {
+	a.kp.Mutex.Lock()
+	defer a.kp.Mutex.Unlock()
+
 	for sliceID := range a.kp.LastUpdated {
 		if a.kp.LastUpdated[sliceID].Add(a.config.KafkaTimeout).Compare(time.Now()) == -1 {
 			a.SendKafkaSlice(sliceID, Lost)
 			a.DeleteSlice(sliceID)
 		}
 	}
+}
+
+func (a *Application) SliceHasErrors(sliceID int64) bool {
+	for seg := range a.kp.Slices[sliceID] {
+
+		if a.kp.Slices[sliceID][seg] == nil {
+			return true
+		}
+	}
+
+	return false
 }

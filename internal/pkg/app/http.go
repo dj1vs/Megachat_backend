@@ -34,7 +34,7 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 			return err
 		}
 
-		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) // +serv
+		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/serv/"
 
 		resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 		if err != nil {
@@ -99,5 +99,4 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: send data to kafka
-
 }

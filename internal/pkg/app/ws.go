@@ -96,7 +96,7 @@ func (a *Application) readPump(c *Client) {
 				Time:     time.Now().Unix(),
 				Payload: ds.FrontRespPayload{
 					Status:  "error",
-					Message: err.Error(),
+					Message: "Невозможно распознать JSON запрос",
 				},
 			}
 		} else {
@@ -109,7 +109,7 @@ func (a *Application) readPump(c *Client) {
 					Time:     request.Time,
 					Payload: ds.FrontRespPayload{
 						Status:  "error",
-						Message: err.Error(),
+						Message: "Произошла ошибка при отправка сообщения на сервис кодирования",
 					},
 				}
 			} else {
