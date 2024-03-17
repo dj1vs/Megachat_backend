@@ -182,14 +182,12 @@ func (a *Application) SendKafkaSlice(sliceID int64, status KafkaSliceStatus) err
 		}
 	}
 
-	msgJSON, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
+	// msgJSON, err := json.Marshal(msg)
+	// if err != nil {
+	// 	return err
+	// }
 
-	go func() {
-		a.Broadcast <- msgJSON
-	}()
+	a.SendMsgToFront(msg)
 
 	return nil
 }

@@ -98,5 +98,50 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to send message to mr. Kafka: %v", err)
 	}
 
-	// TODO: send data to kafka
+	a.SendRespToFront(&ds.FrontResp{
+		Username: requestBody.Username,
+		Time:     requestBody.Time,
+		Payload: ds.FrontRespPayload{
+			Status:  "ok",
+			Message: "",
+		},
+	})
+}
+
+func (a *Application) SendRespToFront(msg *ds.FrontResp) error {
+	jsonRequest, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Println("SendToCoding error marshalling request: ", err)
+		return err
+	}
+
+	condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/serv/"
+
+	resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
+	if err != nil {
+		fmt.Println("SendToCoding error sending request: ", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
+}
+
+func (a *Application) SendMsgToFront(msg *ds.FrontMsg) error {
+	jsonRequest, err := json.Marshal(msg)
+	if err != nil {
+		fmt.Println("SendToCoding error marshalling request: ", err)
+		return err
+	}
+
+	condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/serv/"
+
+	resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
+	if err != nil {
+		fmt.Println("SendToCoding error sending request: ", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
 }
