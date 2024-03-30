@@ -1,0 +1,84 @@
+basePath: /
+definitions:
+  ds.CodingResp:
+    properties:
+      payload:
+        $ref: '#/definitions/ds.CodingRespPayload'
+      time:
+        type: integer
+      username:
+        type: string
+    type: object
+  ds.CodingRespPayload:
+    properties:
+      data:
+        items:
+          type: integer
+        type: array
+      segment_cnt:
+        type: integer
+      segment_num:
+        type: integer
+      status:
+        type: string
+    type: object
+  ds.FrontReq:
+    properties:
+      payload:
+        $ref: '#/definitions/ds.FrontReqPayload'
+      time:
+        type: integer
+      username:
+        type: string
+    type: object
+  ds.FrontReqPayload:
+    properties:
+      data:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /coding:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Сообщение от сервиса кодирования
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/ds.CodingResp'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Недопустимый метод
+        "500":
+          description: Ошибка при чтении JSON
+      summary: Обрабатывает сообщения от сервиса кодирования
+      tags:
+      - accounts
+  /front:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Сообщение от фронтенда
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/ds.FrontReq'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Недопустимый метод
+        "500":
+          description: Ошибка при чтении JSON
+      summary: Обрабатывает сообщения от фронтенда (прикладной уровень)
+      tags:
+      - accounts
+swagger: "2.0"

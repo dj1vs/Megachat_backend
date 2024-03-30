@@ -9,9 +9,17 @@ import (
 	"megachat/internal/app/ds"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/IBM/sarama"
 )
+
+// @title Прикладной уровень системы обмена сообщениями
+// @version 0.0-0
+
+// @host 127.0.0.1:8080
+// @schemes http
+// @BasePath /
 
 func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 	byte_segments := a.TextToByteSegments(frontReq.Payload.Data)
@@ -47,6 +55,14 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 	return nil
 }
 
+// @Summary      Обрабатывает сообщения от сервиса кодирования
+// @Tags         accounts
+// @Accept       json
+// @Success      200
+// @Failure      400  "Недопустимый метод"  httputil.HTTPError
+// @Failure	  500  "Ошибка при чтении JSON" httputil.HTTPError
+// @Param	message body ds.CodingResp true "Сообщение от сервиса кодирования"
+// @Router       /coding [post]
 func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "text/plain")
@@ -106,6 +122,64 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 			Message: "",
 		},
 	})
+}
+
+// @Summary      Обрабатывает сообщения от фронтенда (прикладной уровень)
+// @Tags         accounts
+// @Accept       json
+// @Success      200
+// @Failure      400  "Недопустимый метод"  httputil.HTTPError
+// @Failure	  500  "Ошибка при чтении JSON" httputil.HTTPError
+// @Param	message body ds.FrontReq true "Сообщение от фронтенда"
+// @Router       /front [post]
+func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Error reading request body", http.StatusInternalServerError)
+		return
+	}
+
+	var request ds.FrontReq
+
+	var response *ds.FrontResp
+
+	err = json.Unmarshal(body, &request)
+
+	if err != nil {
+		response = &ds.FrontResp{
+			Username: "",
+			Time:     time.Now().Unix(),
+			Payload: ds.FrontRespPayload{
+				Status:  "error",
+				Message: "Невозможно распознать JSON запрос",
+			},
+		}
+	} else {
+		err = a.SendToCoding(&request)
+
+		if err != nil {
+			response = &ds.FrontResp{
+				Username: request.Username,
+				Time:     request.Time,
+				Payload: ds.FrontRespPayload{
+					Status:  "error",
+					Message: "Произошла ошибка при отправка сообщения на сервис кодирования",
+				},
+			}
+		} else {
+			response = &ds.FrontResp{
+				Username: request.Username,
+				Time:     request.Time,
+				Payload: ds.FrontRespPayload{
+					Status:  "ok",
+					Message: "",
+				},
+			}
+		}
+
+	}
+
+	a.SendRespToFront(response)
 }
 
 func (a *Application) SendRespToFront(msg *ds.FrontResp) error {

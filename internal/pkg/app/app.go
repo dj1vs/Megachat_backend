@@ -1,15 +1,20 @@
 package app
 
+// @BasePath /
+
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"log"
 	"megachat/internal/app/config"
-	"megachat/internal/app/ds"
 	"net/http"
 	"strconv"
 	"time"
+
+	_ "megachat/docs"
+
+	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"     // swagger embed files
+	ginSwagger "github.com/swaggo/gin-swagger" // gin-swagger middleware
 )
 
 const (
@@ -54,6 +59,12 @@ func New(ctx context.Context) (*Application, error) {
 }
 
 func (a *Application) StartServer() {
+	go func() {
+		r := gin.Default()
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		r.Run(":8080")
+	}()
+
 	log.Println("Server started")
 
 	http.HandleFunc("/front", func(w http.ResponseWriter, r *http.Request) {
@@ -75,56 +86,6 @@ func (a *Application) StartServer() {
 	}
 
 	log.Println("Server is down")
-}
-
-func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Error reading request body", http.StatusInternalServerError)
-		return
-	}
-
-	var request ds.FrontReq
-
-	var response *ds.FrontResp
-
-	err = json.Unmarshal(body, &request)
-
-	if err != nil {
-		response = &ds.FrontResp{
-			Username: "",
-			Time:     time.Now().Unix(),
-			Payload: ds.FrontRespPayload{
-				Status:  "error",
-				Message: "Невозможно распознать JSON запрос",
-			},
-		}
-	} else {
-		err = a.SendToCoding(&request)
-
-		if err != nil {
-			response = &ds.FrontResp{
-				Username: request.Username,
-				Time:     request.Time,
-				Payload: ds.FrontRespPayload{
-					Status:  "error",
-					Message: "Произошла ошибка при отправка сообщения на сервис кодирования",
-				},
-			}
-		} else {
-			response = &ds.FrontResp{
-				Username: request.Username,
-				Time:     request.Time,
-				Payload: ds.FrontRespPayload{
-					Status:  "ok",
-					Message: "",
-				},
-			}
-		}
-
-	}
-
-	a.SendRespToFront(response)
 }
 
 func (a *Application) TextToByteSegments(text string) [][]byte {
