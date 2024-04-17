@@ -20,9 +20,6 @@ const docTemplate = `{
                 "consumes": [
                     "application/json"
                 ],
-                "tags": [
-                    "accounts"
-                ],
                 "summary": "Обрабатывает сообщения от сервиса кодирования",
                 "parameters": [
                     {
@@ -42,6 +39,9 @@ const docTemplate = `{
                     "400": {
                         "description": "Недопустимый метод"
                     },
+                    "403": {
+                        "description": "Ошибка при получении сегмента"
+                    },
                     "500": {
                         "description": "Ошибка при чтении JSON"
                     }
@@ -52,9 +52,6 @@ const docTemplate = `{
             "post": {
                 "consumes": [
                     "application/json"
-                ],
-                "tags": [
-                    "accounts"
                 ],
                 "summary": "Обрабатывает сообщения от фронтенда (прикладной уровень)",
                 "parameters": [

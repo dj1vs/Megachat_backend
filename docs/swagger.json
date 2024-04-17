@@ -10,9 +10,6 @@
                 "consumes": [
                     "application/json"
                 ],
-                "tags": [
-                    "accounts"
-                ],
                 "summary": "Обрабатывает сообщения от сервиса кодирования",
                 "parameters": [
                     {
@@ -32,6 +29,9 @@
                     "400": {
                         "description": "Недопустимый метод"
                     },
+                    "403": {
+                        "description": "Ошибка при получении сегмента"
+                    },
                     "500": {
                         "description": "Ошибка при чтении JSON"
                     }
@@ -42,9 +42,6 @@
             "post": {
                 "consumes": [
                     "application/json"
-                ],
-                "tags": [
-                    "accounts"
                 ],
                 "summary": "Обрабатывает сообщения от фронтенда (прикладной уровень)",
                 "parameters": [

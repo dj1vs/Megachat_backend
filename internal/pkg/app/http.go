@@ -56,10 +56,10 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 }
 
 // @Summary      Обрабатывает сообщения от сервиса кодирования
-// @Tags         accounts
 // @Accept       json
 // @Success      200
 // @Failure      400  "Недопустимый метод"  httputil.HTTPError
+// @Failure		403 "Ошибка при получении сегмента" httputil.HTTPError
 // @Failure	  500  "Ошибка при чтении JSON" httputil.HTTPError
 // @Param	message body ds.CodingResp true "Сообщение от сервиса кодирования"
 // @Router       /coding [post]
@@ -125,7 +125,6 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 }
 
 // @Summary      Обрабатывает сообщения от фронтенда (прикладной уровень)
-// @Tags         accounts
 // @Accept       json
 // @Success      200
 // @Failure      400  "Недопустимый метод"  httputil.HTTPError
