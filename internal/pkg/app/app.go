@@ -11,10 +11,8 @@ import (
 	"time"
 
 	_ "megachat/docs"
-
-	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"     // swagger embed files
-	ginSwagger "github.com/swaggo/gin-swagger" // gin-swagger middleware
+	// swagger embed files
+	// gin-swagger middleware
 )
 
 const (
@@ -28,6 +26,8 @@ type Application struct {
 	server *http.Server
 
 	kp *KafkaPayload
+
+	httpClient *http.Client
 }
 
 func New(ctx context.Context) (*Application, error) {
@@ -44,6 +44,9 @@ func New(ctx context.Context) (*Application, error) {
 			LastUpdated: make(map[int64]time.Time, 0),
 			SliceSender: make(map[int64]string, 0),
 		},
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
 	}
 
 	go a.ListenForRecentKafkaMessages()
@@ -59,11 +62,11 @@ func New(ctx context.Context) (*Application, error) {
 }
 
 func (a *Application) StartServer() {
-	go func() {
-		r := gin.Default()
-		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-		r.Run(":8080")
-	}()
+	// go func() {
+	// 	r := gin.Default()
+	// 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// 	r.Run(":8080")
+	// }()
 
 	log.Println("Server started")
 

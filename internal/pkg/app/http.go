@@ -23,8 +23,9 @@ import (
 
 func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 	byte_segments := a.TextToByteSegments(frontReq.Payload.Data)
-
 	segments_cnt := len(byte_segments)
+	log.Printf("SendToCoding: Сообщение успешно разбито на %d сегментов\n", segments_cnt)
+
 	for segment_num, byte_segment := range byte_segments {
 		request := &ds.CodingReq{
 			Username: frontReq.Username,
@@ -38,15 +39,15 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 
 		jsonRequest, err := json.Marshal(request)
 		if err != nil {
-			fmt.Println("SendToCoding error marshalling request: ", err)
+			fmt.Println("SendToCoding: не удалось запаковать запрос ", err)
 			return err
 		}
 
-		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/serv/"
+		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/code"
 
-		resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
+		resp, err := a.httpClient.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 		if err != nil {
-			fmt.Println("SendToCoding error sending request: ", err)
+			fmt.Println("SendToCoding: не удалось отправить запрос ", err)
 			return err
 		}
 		defer resp.Body.Close()
@@ -64,22 +65,23 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 // @Param	message body ds.CodingResp true "Сообщение от сервиса кодирования"
 // @Router       /coding [post]
 func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
+	log.Println("--> /coding: обработка сообщения от сервера кодирования")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "text/plain")
 
 	method := r.Method
 
 	if method != http.MethodPost {
-		//fmt.Fprint(w, "You should send POST request")
+		log.Println("--> /coding: отправлен неправильный тип запроса")
 		http.Error(w, "Method not allowed", http.StatusBadRequest)
-		// w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	// Read the request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Error reading request body", http.StatusInternalServerError)
+		log.Println("--> /coding: не удалось прочитать тело запроса")
+		http.Error(w, "Не удалось прочитать тело запроса", http.StatusInternalServerError)
 		return
 	}
 
@@ -87,19 +89,22 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 
 	err = json.Unmarshal(body, &requestBody)
 	if err != nil {
-		log.Println("Невозможно распознать сообщение от сервиса кодирования:")
+		log.Println("--> /coding: Получено сообщение в неправильном формате:")
 		log.Println(err)
+		http.Error(w, "Неверный формат сообщения", http.StatusBadRequest)
 		return
 	}
 
+	log.Println("--> /coding: Сообщение успешно рарспознано, отправка сообщения в Kafka")
 	// SEND JSON TO KAFKA
-
 	sarama_config := sarama.NewConfig()
 	sarama_config.Producer.Return.Successes = true
 
 	producer, err := sarama.NewSyncProducer([]string{a.config.KafkaHost + ":" + strconv.Itoa(a.config.KafkaPort)}, sarama_config)
 	if err != nil {
-		log.Fatalf("Failed to create Kafka producer: %v", err)
+		log.Fatalf("--> /coding: Не удалось создать Kafka-producer:\n%v", err)
+		http.Error(w, "Не удалось поместить сообщение в Kafka", http.StatusInternalServerError)
+		return
 	}
 	defer producer.Close()
 
@@ -111,17 +116,9 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 
 	_, _, err = producer.SendMessage(kafka_request)
 	if err != nil {
-		log.Printf("Failed to send message to mr. Kafka: %v", err)
+		log.Printf("Не удалось отправить сообщение в Kafka: %v", err)
+		http.Error(w, "Не удалось отправить сообщение в Kafka", http.StatusInternalServerError)
 	}
-
-	a.SendRespToFront(&ds.FrontResp{
-		Username: requestBody.Username,
-		Time:     requestBody.Time,
-		Payload: ds.FrontRespPayload{
-			Status:  "ok",
-			Message: "",
-		},
-	})
 }
 
 // @Summary      Обрабатывает сообщения от фронтенда (прикладной уровень)
@@ -132,6 +129,7 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 // @Param	message body ds.FrontReq true "Сообщение от фронтенда"
 // @Router       /front [post]
 func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
+	log.Println("--> /front: получено новое сообщение")
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Error reading request body", http.StatusInternalServerError)
@@ -145,6 +143,8 @@ func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(body, &request)
 
 	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		log.Println("--> /front: сообщение не удалось распознать")
 		response = &ds.FrontResp{
 			Username: "",
 			Time:     time.Now().Unix(),
@@ -154,9 +154,14 @@ func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 	} else {
+		log.Println("--> /front: сообщение успешно распознано")
+		log.Println(request)
+		log.Println("--> /front: отправка сообщения на сервис кодирования")
 		err = a.SendToCoding(&request)
 
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Println("--> /front: не удалось отправить сообщение сервису кодирования")
 			response = &ds.FrontResp{
 				Username: request.Username,
 				Time:     request.Time,
@@ -166,6 +171,8 @@ func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
 				},
 			}
 		} else {
+			w.WriteHeader(http.StatusOK)
+			log.Println("--> /front: сообщение успешно отправлено на сервис кодирования")
 			response = &ds.FrontResp{
 				Username: request.Username,
 				Time:     request.Time,
@@ -175,10 +182,12 @@ func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
 				},
 			}
 		}
-
 	}
 
-	a.SendRespToFront(response)
+	response_bytes, _ := json.Marshal(response)
+	w.Write(response_bytes)
+
+	// a.SendRespToFront(response)
 }
 
 func (a *Application) SendRespToFront(msg *ds.FrontResp) error {
