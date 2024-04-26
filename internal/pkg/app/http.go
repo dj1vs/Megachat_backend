@@ -41,6 +41,8 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 		if err != nil {
 			fmt.Println("SendToCoding: не удалось запаковать запрос ", err)
 			return err
+		} else {
+			log.Printf("Отправка сегмента %v на сервер канального уровня\n%v\n", segment_num, string(jsonRequest))
 		}
 
 		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/code"
@@ -92,6 +94,12 @@ func (a *Application) ServeCoding(w http.ResponseWriter, r *http.Request) {
 		log.Println("--> /coding: Получено сообщение в неправильном формате:")
 		log.Println(err)
 		http.Error(w, "Неверный формат сообщения", http.StatusBadRequest)
+		return
+	}
+
+	if requestBody.Payload.Segment_num >= requestBody.Payload.Segment_cnt {
+		log.Printf("--> /coding: Номер сегмента за границами размера сообщения %v\n", requestBody.Time)
+		http.Error(w, "Неверный формат сообщения: номер сегмента за границами размера сообщения", http.StatusBadRequest)
 		return
 	}
 
@@ -212,18 +220,21 @@ func (a *Application) SendRespToFront(msg *ds.FrontResp) error {
 func (a *Application) SendMsgToFront(msg *ds.FrontMsg) error {
 	jsonRequest, err := json.Marshal(msg)
 	if err != nil {
-		fmt.Println("SendToCoding error marshalling request: ", err)
+		fmt.Println("SendToFront: не удалось упаковать запрос ", err)
 		return err
 	}
+	log.Printf("Собранное сообщение: %v", string(jsonRequest))
 
-	condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/serv/"
+	frontServiceURL := "http://127.0.0.1:8080"
 
-	resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
+	resp, err := http.Post(frontServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 	if err != nil {
-		fmt.Println("SendToCoding error sending request: ", err)
+		fmt.Println("SendToFront: не удалось отправить сообщение ", err)
 		return err
 	}
 	defer resp.Body.Close()
+
+	log.Printf("Сообщение %v успешно отправлено на прикладной уровень", msg.Time)
 
 	return nil
 }

@@ -10,24 +10,25 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
-        content_length = int(self.headers['Content-Length'])
-        post_data = self.rfile.read(content_length)
+        pass
+        # content_length = int(self.headers['Content-Length'])
+        # post_data = self.rfile.read(content_length)
 
-        # json_data = json.loads(post_data)
-        # json_data['payload']['status'] = 'ok'
+        # # json_data = json.loads(post_data)
+        # # json_data['payload']['status'] = 'ok'
 
-        # print(json_data)
+        # # print(json_data)
 
-        # Forward the received request to another URL
-        response = requests.post("http://127.0.0.1:8800/coding", data=post_data)
+        # # Forward the received request to another URL
+        # response = requests.post("http://127.0.0.1:8800/coding", data=post_data)
 
         # Set response headers
         self._set_headers()
 
-        # Send the response from the destination URL back to the client
-        self.wfile.write(response.content)
+        # # Send the response from the destination URL back to the client
+        # self.wfile.write(response.content)
 
-def run(server_class=HTTPServer, handler_class=RequestHandler, port=3000):
+def run(server_class=HTTPServer, handler_class=RequestHandler, port=8080):
     server_address = ('', port)
     httpd = server_class(server_address, handler_class)
     print(f"Starting HTTP server on port {port}...")

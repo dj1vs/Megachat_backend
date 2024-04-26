@@ -90,6 +90,9 @@ func (a *Application) ProcessKafkaMessage(msg *sarama.ConsumerMessage) error {
 }
 
 func (a *Application) ProcessNewKafkaSlice(msg *ds.CodingResp) {
+	log.Printf("kafka --> В Кафку поступил новый сегмент сообщения: %v\n", msg.Time)
+	log.Printf("kafka --> Сегмент %v/%v", msg.Payload.Segment_num, msg.Payload.Segment_cnt)
+
 	sliceID := msg.Time
 	segCount := msg.Payload.Segment_cnt
 	segNum := msg.Payload.Segment_num
@@ -107,6 +110,26 @@ func (a *Application) ProcessNewKafkaSlice(msg *ds.CodingResp) {
 	a.kp.SliceSender[sliceID] = msg.Username
 
 	a.kp.LastUpdated[sliceID] = time.Now()
+
+	if segCount == 1 { // TODO: move to a separate function
+		log.Printf("kafka --> Поступили все сегменты сообщения %v\n", sliceID)
+		isFail := a.SliceHasErrors(sliceID)
+
+		var err error
+		if !isFail {
+			err = a.SendKafkaSlice(sliceID, Success)
+		} else {
+			log.Printf("kafka --> Один из сегментов сообщения %v пришёл с ошибкой\n", sliceID)
+			err = a.SendKafkaSlice(sliceID, Error)
+		}
+
+		a.DeleteSlice(sliceID)
+
+		if err != nil {
+			log.Println(err)
+			return
+		}
+	}
 }
 
 func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
@@ -115,15 +138,13 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 	segNum := msg.Payload.Segment_num
 	segData := msg.Payload.Data
 
-	a.kp.Slices[sliceID][segNum] = segData
-
 	// save segment
-	// segStatus := msg.Payload.Status
-	// if segStatus == "" {
-	//
-	// } else {
-	// 	a.kp.Slices[sliceID][segNum] = nil
-	// }
+	segStatus := msg.Payload.Status
+	if segStatus == "ok" {
+		a.kp.Slices[sliceID][segNum] = segData
+	} else {
+		a.kp.Slices[sliceID][segNum] = nil
+	}
 
 	// update segments data
 	a.kp.Segments[sliceID]++
@@ -132,12 +153,14 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 
 	// check if we got all slice segments
 	if a.kp.Segments[sliceID] == int64(segCount) {
+		log.Printf("kafka --> Поступили все сегменты сообщения %v\n", sliceID)
 		isFail := a.SliceHasErrors(sliceID)
 
 		var err error
 		if !isFail {
 			err = a.SendKafkaSlice(sliceID, Success)
 		} else {
+			log.Printf("kafka --> Один из сегментов сообщения %v пришёл с ошибкой\n", sliceID)
 			err = a.SendKafkaSlice(sliceID, Error)
 		}
 
@@ -151,6 +174,7 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 	return nil
 }
 func (a *Application) SendKafkaSlice(sliceID int64, status KafkaSliceStatus) error {
+	log.Println("Отправка прикладному уровню сообщения из Кафки")
 	msg := &ds.FrontMsg{
 		Username: a.kp.SliceSender[sliceID],
 		Time:     sliceID,
@@ -205,6 +229,8 @@ func (a *Application) CheckLostSlices() {
 
 	for sliceID := range a.kp.LastUpdated {
 		if a.kp.LastUpdated[sliceID].Add(a.config.KafkaTimeout).Compare(time.Now()) == -1 {
+			log.Println("--> LostSlicesCheck: обнаружено сообщение с потерянным сегментом:")
+			log.Println(sliceID, "\nОтправляю на прикладной уровень сообщение о потере")
 			a.SendKafkaSlice(sliceID, Lost)
 			a.DeleteSlice(sliceID)
 		}

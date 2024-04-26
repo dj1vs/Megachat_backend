@@ -114,6 +114,12 @@ func (a *Application) TextToByteSegments(text string) [][]byte {
 		}
 	}
 
+	log.Printf("Сообщение успешно разбито на %v сегментов\n", len(byte_segments))
+	for segment_num, segment := range byte_segments {
+		log.Printf("Сегмент #%v", segment_num)
+		log.Println(segment)
+	}
+
 	return byte_segments
 
 }
