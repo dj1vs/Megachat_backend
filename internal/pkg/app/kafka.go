@@ -36,17 +36,17 @@ func (a *Application) ListenForRecentKafkaMessages() {
 
 	consumer, err := sarama.NewConsumer(brokers, sarama_config)
 	if err != nil {
-		log.Fatalf("Failed to create Kafka consumer: %v", err)
+		log.Fatalf("Kafka--> Failed to create Kafka consumer: %v", err)
 	} else {
-		log.Println("Kafka consumer created")
+		log.Println("Kafka--> Kafka consumer created")
 	}
 	defer consumer.Close()
 
 	partConsumer, err := consumer.ConsumePartition(topics[0], 0, sarama.OffsetNewest)
 	if err != nil {
-		log.Fatalf("Failed to consume partition: %v", err)
+		log.Fatalf("Kafka--> Failed to consume partition: %v", err)
 	} else {
-		log.Println("Partition consumed")
+		log.Println("Kafka--> Partition consumed")
 	}
 	defer partConsumer.Close()
 
@@ -90,8 +90,8 @@ func (a *Application) ProcessKafkaMessage(msg *sarama.ConsumerMessage) error {
 }
 
 func (a *Application) ProcessNewKafkaSlice(msg *ds.CodingResp) {
-	log.Printf("kafka --> В Кафку поступил новый сегмент сообщения: %v\n", msg.Time)
-	log.Printf("kafka --> Сегмент %v/%v", msg.Payload.Segment_num, msg.Payload.Segment_cnt)
+	log.Printf("Kafka--> В Кафку поступил новый сегмент сообщения: %v\n", msg.Time)
+	log.Printf("Kafka--> Сегмент %v/%v", msg.Payload.Segment_num, msg.Payload.Segment_cnt)
 
 	sliceID := msg.Time
 	segCount := msg.Payload.Segment_cnt
@@ -112,14 +112,14 @@ func (a *Application) ProcessNewKafkaSlice(msg *ds.CodingResp) {
 	a.kp.LastUpdated[sliceID] = time.Now()
 
 	if segCount == 1 { // TODO: move to a separate function
-		log.Printf("kafka --> Поступили все сегменты сообщения %v\n", sliceID)
+		log.Printf("Kafka--> Поступили все сегменты сообщения %v\n", sliceID)
 		isFail := a.SliceHasErrors(sliceID)
 
 		var err error
 		if !isFail {
 			err = a.SendKafkaSlice(sliceID, Success)
 		} else {
-			log.Printf("kafka --> Один из сегментов сообщения %v пришёл с ошибкой\n", sliceID)
+			log.Printf("Kafka--> Один из сегментов сообщения %v пришёл с ошибкой\n", sliceID)
 			err = a.SendKafkaSlice(sliceID, Error)
 		}
 
@@ -153,14 +153,14 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 
 	// check if we got all slice segments
 	if a.kp.Segments[sliceID] == int64(segCount) {
-		log.Printf("kafka --> Поступили все сегменты сообщения %v\n", sliceID)
+		log.Printf("Kafka--> Поступили все сегменты сообщения %v\n", sliceID)
 		isFail := a.SliceHasErrors(sliceID)
 
 		var err error
 		if !isFail {
 			err = a.SendKafkaSlice(sliceID, Success)
 		} else {
-			log.Printf("kafka --> Один из сегментов сообщения %v пришёл с ошибкой\n", sliceID)
+			log.Printf("Kafka--> Один из сегментов сообщения %v пришёл с ошибкой\n", sliceID)
 			err = a.SendKafkaSlice(sliceID, Error)
 		}
 
@@ -174,7 +174,7 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 	return nil
 }
 func (a *Application) SendKafkaSlice(sliceID int64, status KafkaSliceStatus) error {
-	log.Println("Отправка прикладному уровню сообщения из Кафки")
+	log.Println("Kafka--> Отправка прикладному уровню сообщения из Кафки")
 	msg := &ds.FrontMsg{
 		Username: a.kp.SliceSender[sliceID],
 		Time:     sliceID,
@@ -188,30 +188,14 @@ func (a *Application) SendKafkaSlice(sliceID int64, status KafkaSliceStatus) err
 		}
 
 		msg.Payload = ds.FrontMsgPayload{
-			Status:  "ok",
-			Message: "",
-			Data:    string(msgData),
+			Data: string(msgData),
 		}
+		a.SendMsgToFront(msg)
 	case Error:
-		msg.Payload = ds.FrontMsgPayload{
-			Status:  "error",
-			Message: "Произошла ошибка при декодировании одного изсегментов сообщения",
-			Data:    "",
-		}
+		log.Printf("Kafka--> Сообщение %v пришло c ошибкой; не отправляю", sliceID)
 	case Lost:
-		msg.Payload = ds.FrontMsgPayload{
-			Status:  "error",
-			Message: "Часть сообщения потеряна",
-			Data:    "",
-		}
+		log.Printf("Kafka--> Один из сегментов сообщения %v потерян; не отправляю", sliceID)
 	}
-
-	// msgJSON, err := json.Marshal(msg)
-	// if err != nil {
-	// 	return err
-	// }
-
-	a.SendMsgToFront(msg)
 
 	return nil
 }
@@ -229,7 +213,7 @@ func (a *Application) CheckLostSlices() {
 
 	for sliceID := range a.kp.LastUpdated {
 		if a.kp.LastUpdated[sliceID].Add(a.config.KafkaTimeout).Compare(time.Now()) == -1 {
-			log.Println("--> LostSlicesCheck: обнаружено сообщение с потерянным сегментом:")
+			log.Println("Kafka--> LostSlicesCheck: обнаружено сообщение с потерянным сегментом:")
 			log.Println(sliceID, "\nОтправляю на прикладной уровень сообщение о потере")
 			a.SendKafkaSlice(sliceID, Lost)
 			a.DeleteSlice(sliceID)

@@ -2,11 +2,6 @@ package ds
 
 // payloads
 
-type FrontRespPayload struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
-
 type CodingRespPayload struct {
 	Status      string `json:"status"`
 	Data        []byte `json:"data"`
@@ -15,12 +10,6 @@ type CodingRespPayload struct {
 }
 
 // responses
-
-type FrontResp struct {
-	Username string           `json:"username"`
-	Time     int64            `json:"time"`
-	Payload  FrontRespPayload `json:"payload"`
-}
 
 type CodingResp struct {
 	Username string            `json:"username"`

@@ -3,9 +3,7 @@ package ds
 // payloads
 
 type FrontMsgPayload struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-	Data    string `json:"data"`
+	Data string `json:"data"`
 }
 
 // messages
