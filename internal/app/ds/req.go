@@ -1,11 +1,5 @@
 package ds
 
-// payloads
-
-type FrontReqPayload struct {
-	Data string `json:"data"`
-}
-
 type CodingReqPayload struct {
 	Data        []byte `json:"data"`
 	Segment_num int32  `json:"segment_num"`
@@ -14,10 +8,10 @@ type CodingReqPayload struct {
 
 // requests
 
-type FrontReq struct {
-	Username string          `json:"username"`
-	Time     int64           `json:"time"`
-	Payload  FrontReqPayload `json:"payload"`
+type FrontReq struct { // TODO: merge with msg
+	Username string `json:"username"`
+	Time     int64  `json:"time"`
+	Message  string `json:"message"`
 }
 
 type CodingReq struct {

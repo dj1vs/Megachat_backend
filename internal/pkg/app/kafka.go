@@ -90,7 +90,7 @@ func (a *Application) ProcessKafkaMessage(msg *sarama.ConsumerMessage) error {
 }
 
 func (a *Application) ProcessNewKafkaSlice(msg *ds.CodingResp) {
-	log.Printf("Kafka--> В Кафку поступил новый сегмент сообщения: %v\n", msg.Time)
+	log.Printf("Kafka--> B Кафку поступил новый сегмент сообщения: %v\n", msg.Time)
 	log.Printf("Kafka--> Сегмент %v/%v", msg.Payload.Segment_num, msg.Payload.Segment_cnt)
 
 	sliceID := msg.Time
@@ -119,7 +119,7 @@ func (a *Application) ProcessNewKafkaSlice(msg *ds.CodingResp) {
 		if !isFail {
 			err = a.SendKafkaSlice(sliceID, Success)
 		} else {
-			log.Printf("Kafka--> Один из сегментов сообщения %v пришёл с ошибкой\n", sliceID)
+			log.Printf("Kafka--> Один из сегментов сообщения %v пришёл c ошибкой\n", sliceID)
 			err = a.SendKafkaSlice(sliceID, Error)
 		}
 
@@ -160,7 +160,7 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 		if !isFail {
 			err = a.SendKafkaSlice(sliceID, Success)
 		} else {
-			log.Printf("Kafka--> Один из сегментов сообщения %v пришёл с ошибкой\n", sliceID)
+			log.Printf("Kafka--> Один из сегментов сообщения %v пришёл c ошибкой\n", sliceID)
 			err = a.SendKafkaSlice(sliceID, Error)
 		}
 
@@ -187,9 +187,7 @@ func (a *Application) SendKafkaSlice(sliceID int64, status KafkaSliceStatus) err
 			msgData = append(msgData, seg...)
 		}
 
-		msg.Payload = ds.FrontMsgPayload{
-			Data: string(msgData),
-		}
+		msg.Message = string(msgData)
 		a.SendMsgToFront(msg)
 	case Error:
 		log.Printf("Kafka--> Сообщение %v пришло c ошибкой; не отправляю", sliceID)
@@ -213,8 +211,8 @@ func (a *Application) CheckLostSlices() {
 
 	for sliceID := range a.kp.LastUpdated {
 		if a.kp.LastUpdated[sliceID].Add(a.config.KafkaTimeout).Compare(time.Now()) == -1 {
-			log.Println("Kafka--> LostSlicesCheck: обнаружено сообщение с потерянным сегментом:")
-			log.Println(sliceID, "\nОтправляю на прикладной уровень сообщение о потере")
+			log.Println("Kafka--> LostSlicesCheck: обнаружено сообщение c потерянным сегментом:")
+			log.Println(sliceID, "\nOтпpaвляю на прикладной уровень сообщение o потере")
 			a.SendKafkaSlice(sliceID, Lost)
 			a.DeleteSlice(sliceID)
 		}

@@ -21,7 +21,7 @@ import (
 // @BasePath /
 
 func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
-	byte_segments := a.TextToByteSegments(frontReq.Payload.Data)
+	byte_segments := a.TextToByteSegments(frontReq.Message)
 	segments_cnt := len(byte_segments)
 	log.Printf("SendToCoding: Сообщение успешно разбито на %d сегментов\n", segments_cnt)
 
@@ -172,7 +172,7 @@ func (a *Application) SendMsgToFront(msg *ds.FrontMsg) error {
 	}
 	log.Printf("Собранное сообщение: %v", string(jsonRequest))
 
-	frontServiceURL := "http://127.0.0.1:8080"
+	frontServiceURL := "http://127.0.0.1/back" //TODO: move to config
 
 	resp, err := http.Post(frontServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 	if err != nil {
