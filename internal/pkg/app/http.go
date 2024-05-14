@@ -9,7 +9,6 @@ import (
 	"megachat/internal/app/ds"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/IBM/sarama"
 )
@@ -146,21 +145,10 @@ func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
 
 	var request ds.FrontReq
 
-	var response *ds.FrontResp
-
 	err = json.Unmarshal(body, &request)
 
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
 		log.Println("--> /front: сообщение не удалось распознать")
-		response = &ds.FrontResp{
-			Username: "",
-			Time:     time.Now().Unix(),
-			Payload: ds.FrontRespPayload{
-				Status:  "error",
-				Message: "Невозможно распознать JSON запрос",
-			},
-		}
 	} else {
 		log.Println("--> /front: сообщение успешно распознано")
 		log.Println(request)
@@ -168,53 +156,12 @@ func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
 		err = a.SendToCoding(&request)
 
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			log.Println("--> /front: не удалось отправить сообщение сервису кодирования")
-			response = &ds.FrontResp{
-				Username: request.Username,
-				Time:     request.Time,
-				Payload: ds.FrontRespPayload{
-					Status:  "error",
-					Message: "Произошла ошибка при отправка сообщения на сервис кодирования",
-				},
-			}
 		} else {
-			w.WriteHeader(http.StatusOK)
 			log.Println("--> /front: сообщение успешно отправлено на сервис кодирования")
-			response = &ds.FrontResp{
-				Username: request.Username,
-				Time:     request.Time,
-				Payload: ds.FrontRespPayload{
-					Status:  "ok",
-					Message: "",
-				},
-			}
 		}
 	}
 
-	response_bytes, _ := json.Marshal(response)
-	w.Write(response_bytes)
-
-	// a.SendRespToFront(response)
-}
-
-func (a *Application) SendRespToFront(msg *ds.FrontResp) error {
-	jsonRequest, err := json.Marshal(msg)
-	if err != nil {
-		fmt.Println("SendToCoding error marshalling request: ", err)
-		return err
-	}
-
-	condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/serv/"
-
-	resp, err := http.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
-	if err != nil {
-		fmt.Println("SendToCoding error sending request: ", err)
-		return err
-	}
-	defer resp.Body.Close()
-
-	return nil
 }
 
 func (a *Application) SendMsgToFront(msg *ds.FrontMsg) error {
