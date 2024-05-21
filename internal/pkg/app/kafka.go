@@ -138,6 +138,8 @@ func (a *Application) ProcessNewSliceSegment(msg *ds.CodingResp) error {
 	segNum := msg.Payload.Segment_num
 	segData := msg.Payload.Data
 
+	log.Printf("Kafka --> Поступил сегмент %v сообщения %v\n", segNum, sliceID)
+
 	// save segment
 	segStatus := msg.Payload.Status
 	if segStatus == "ok" {
