@@ -23,7 +23,7 @@ import (
 func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 	byte_segments := a.TextToByteSegments(frontReq.Message)
 	segments_cnt := len(byte_segments)
-	log.Printf("SendToCoding: Сообщение успешно разбито на %d сегментов\n", segments_cnt)
+	log.Printf("SendToCoding: Сообщение успешно разбито на сегменты \t Количество сегментов: %d\n", segments_cnt)
 
 	for segment_num, byte_segment := range byte_segments {
 		request := &ds.CodingReq{

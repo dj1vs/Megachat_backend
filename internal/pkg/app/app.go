@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"megachat/internal/app/config"
 	"net/http"
@@ -114,10 +115,12 @@ func (a *Application) TextToByteSegments(text string) [][]byte {
 		}
 	}
 
-	log.Printf("Сообщение успешно разбито на %v сегментов\n", len(byte_segments))
+	log.Printf("Сообщение успешно разбито на сегменты\t Количество сегментов: %v", len(byte_segments))
 	for segment_num, segment := range byte_segments {
 		log.Printf("Сегмент #%v", segment_num)
 		log.Println(segment)
+		fmt.Println(string(segment))
+
 	}
 
 	return byte_segments
