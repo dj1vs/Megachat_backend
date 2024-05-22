@@ -8,7 +8,7 @@ type CodingReqPayload struct {
 
 // requests
 
-type FrontReq struct { // TODO: merge with msg
+type FrontReq struct {
 	Username string `json:"username"`
 	Time     int64  `json:"time"`
 	Message  string `json:"message"`
