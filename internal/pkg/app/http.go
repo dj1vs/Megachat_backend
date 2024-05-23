@@ -44,8 +44,9 @@ func (a *Application) SendToCoding(frontReq *ds.FrontReq) error {
 			log.Printf("Отправка сегмента %v на сервер канального уровня\n%v\n", segment_num, string(jsonRequest))
 		}
 
-		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/code"
+		condingServiceURL := "http://" + a.config.CodingHost + ":" + strconv.Itoa(a.config.CodingPort) + "/code/"
 
+		log.Println("--> /front: сообщение отправлено на сервис кодирования")
 		resp, err := a.httpClient.Post(condingServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 		if err != nil {
 			fmt.Println("SendToCoding: не удалось отправить запрос ", err)
@@ -157,8 +158,6 @@ func (a *Application) ServeFront(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil {
 			log.Println("--> /front: не удалось отправить сообщение сервису кодирования")
-		} else {
-			log.Println("--> /front: сообщение успешно отправлено на сервис кодирования")
 		}
 	}
 
@@ -172,7 +171,7 @@ func (a *Application) SendMsgToFront(msg *ds.FrontMsg) error {
 	}
 	log.Printf("Собранное сообщение: %v", string(jsonRequest))
 
-	frontServiceURL := "http://127.0.0.1/back" //TODO: move to config
+	frontServiceURL := "http://192.168.120.136:8080/back" //TODO: move to config
 
 	resp, err := http.Post(frontServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 	if err != nil {

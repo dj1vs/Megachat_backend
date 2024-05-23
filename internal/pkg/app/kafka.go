@@ -195,12 +195,12 @@ func (a *Application) SendKafkaSlice(sliceID int64, status KafkaSliceStatus) err
 		a.SendMsgToFront(msg)
 	case Error:
 		msg.Status = "error"
-		msg.Message = "Segment error"
+		msg.Message = "Один из сегментов пришёл с ошибкой"
 		log.Printf("Kafka--> Сообщение %v пришло c ошибкой; отправляю на фронтенд со статусом ошибки", sliceID)
 		a.SendMsgToFront(msg)
 	case Lost:
 		msg.Status = "error"
-		msg.Message = "Segment lost"
+		msg.Message = "Один из сегментов потерян"
 		log.Printf("Kafka--> Один из сегментов сообщения %v потерян; отправляю на фронтенд со статусом ошибки", sliceID)
 		a.SendMsgToFront(msg)
 	}
