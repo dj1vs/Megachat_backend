@@ -10,8 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-
-	_ "megachat/docs"
+	// _ "megachat/docs"
 	// swagger embed files
 	// gin-swagger middleware
 )

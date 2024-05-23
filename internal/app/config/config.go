@@ -16,6 +16,9 @@ type Config struct {
 	CodingHost string
 	CodingPort int
 
+	FrontHost string
+	FrontPort int
+
 	KafkaHost    string
 	KafkaPort    int
 	KafkaTopic   string

@@ -171,7 +171,7 @@ func (a *Application) SendMsgToFront(msg *ds.FrontMsg) error {
 	}
 	log.Printf("Собранное сообщение: %v", string(jsonRequest))
 
-	frontServiceURL := "http://192.168.120.136:8080/back" //TODO: move to config
+	frontServiceURL := "http://" + a.config.FrontHost + ":" + strconv.Itoa(a.config.FrontPort) + "/back"
 
 	resp, err := http.Post(frontServiceURL, "application/json", bytes.NewBuffer(jsonRequest))
 	if err != nil {
